@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Impostor Words - Online</title>
+    <!-- Tailwind CSS para Layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PeerJS para Multiplayer Online (P2P) -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <!-- Fontes do Google -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --primary: #8b5cf6;
+            --secondary: #ec4899;
+            --accent: #06b6d4;
+            --text-light: #f8fafc;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-light);
+            overflow-x: hidden;
+            background-image: radial-gradient(circle at 50% 0%, #1e1b4b 0%, var(--bg-color) 70%);
+        }
+
+        /* Animações e Estilos Neon */
+        .neon-text {
+            text-shadow: 0 0 10px var(--primary), 0 0 20px var(--secondary);
+        }
+
+        .neon-border {
+            box-shadow: 0 0 10px var(--primary), inset 0 0 10px var(--secondary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn {
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 10px 20px rgba(236, 72, 153, 0.4);
+        }
+
+        .screen {
+            display: none;
+            min-height: 100vh;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse-fast {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .roulette-container {
+            overflow: hidden;
+            height: 60px;
+            position: relative;
+        }
+
+        .roulette-list {
+            transition: transform 3s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .player-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .timer-bar {
+            height: 10px;
+            background: var(--secondary);
+            width: 100%;
+            transition: width 1s linear;
+            border-radius: 5px;
+        }
+
+        .hidden-word {
+            filter: blur(8px);
+            transition: filter 0.3s;
+            cursor: pointer;
+        }
+        
+        .hidden-word:hover {
+            filter: blur(0px);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- TELA 1: MENU PRINCIPAL -->
+    <div id="screen-menu" class="screen active w-full max-w-md mx-auto">
+        <h1 class="text-5xl font-extrabold text-center mb-2 neon-text">IMPOSTOR<br>WORDS</h1>
+        <p class="text-center text-gray-400 mb-8">Adivinhe a palavra. Engane seus amigos.</p>
+        
+        <input type="text" id="player-name" placeholder="Seu Apelido" class="w-full p-4 mb-6 rounded-xl bg-gray-800 text-white border-2 border-gray-700 focus:border-purple-500 outline-none text-center text-xl font-bold">
+        
+        <button onclick="ui_showCreateRoom()" class="btn w-full p-4 rounded-xl text-xl mb-4">Criar Sala (Host)</button>
+        <button onclick="ui_showJoinRoom()" class="btn w-full p-4 rounded-xl text-xl bg-gradient-to-r from-cyan-500 to-blue-500 mb-4">Entrar na Sala</button>
+    </div>
+
+    <!-- TELA 2: CRIAR SALA (HOST) -->
+    <div id="screen-create" class="screen w-full max-w-md mx-auto">
+        <h2 class="text-3xl font-bold mb-6 text-purple-400">Configurar Jogo</h2>
+        
+        <div class="w-full space-y-4 mb-8 bg-gray-800 p-6 rounded-xl">
+            <div>
+                <label class="block text-gray-400 text-sm mb-1">Modo de Jogo</label>
+                <select id="config-mode" class="w-full p-2 rounded bg-gray-700 text-white outline-none">
+                    <option value="blind">Impostor Cego (Não recebe palavra)</option>
+                    <option value="double">Palavra Dupla (Recebe palavra parecida)</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-gray-400 text-sm mb-1">Tempo de Dica (Segundos)</label>
+                <select id="config-clue-time" class="w-full p-2 rounded bg-gray-700 text-white outline-none">
+                    <option value="20" selected>20 Segundos (Rápido!)</option>
+                    <option value="30">30 Segundos</option>
+                    <option value="45">45 Segundos</option>
+                    <option value="60">60 Segundos</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-gray-400 text-sm mb-1">Rodadas</label>
+                <select id="config-rounds" class="w-full p-2 rounded bg-gray-700 text-white outline-none">
+                    <option value="3">3 Rodadas</option>
+                    <option value="5" selected>5 Rodadas</option>
+                    <option value="7">7 Rodadas</option>
+                </select>
+            </div>
+        </div>
+
+        <button onclick="host_createRoom()" id="btn-create-room" class="btn w-full p-4 rounded-xl text-xl mb-4">Iniciar Servidor</button>
+        <button onclick="ui_showScreen('screen-menu')" class="w-full p-4 rounded-xl text-xl bg-gray-700 hover:bg-gray-600">Voltar</button>
+    </div>
+
+    <!-- TELA 3: ENTRAR NA SALA (GUEST) -->
+    <div id="screen-join" class="screen w-full max-w-md mx-auto">
+        <h2 class="text-3xl font-bold mb-6 text-cyan-400">Entrar na Sala</h2>
+        <p class="text-center text-gray-400 mb-4">Peça o código da sala para o Host.</p>
+        
+        <input type="text" id="room-code-input" placeholder="CÓDIGO (ex: A1B2)" class="w-full p-4 mb-6 rounded-xl bg-gray-800 text-white border-2 border-gray-700 focus:border-cyan-500 outline-none text-center text-2xl font-bold uppercase" maxlength="6">
+        
+        <button onclick="guest_joinRoom()" id="btn-join-room" class="btn w-full p-4 rounded-xl text-xl mb-4 bg-gradient-to-r from-cyan-500 to-blue-500">Conectar</button>
+        <button onclick="ui_showScreen('screen-menu')" class="w-full p-4 rounded-xl text-xl bg-gray-700 hover:bg-gray-600">Voltar</button>
+    </div>
+
+    <!-- TELA 4: LOBBY -->
+    <div id="screen-lobby" class="screen w-full max-w-lg mx-auto">
+        <div class="text-center mb-6">
+            <h2 class="text-sm text-gray-400 uppercase tracking-widest">Código da Sala</h2>
+            <h1 id="lobby-room-code" class="text-5xl font-extrabold text-white tracking-widest neon-text mb-2">----</h1>
+            <p id="lobby-status" class="text-cyan-400">Aguardando jogadores...</p>
+        </div>
+
+        <div id="lobby-players" class="w-full grid grid-cols-2 gap-3 mb-8">
+            <!-- Jogadores aparecerão aqui via JS -->
+        </div>
+
+        <button id="btn-start-game" onclick="host_startGame()" class="btn w-full p-4 rounded-xl text-xl hidden">Começar Jogo</button>
+    </div>
+
+    <!-- TELA 5: ROLE REVEAL -->
+    <div id="screen-role" class="screen w-full max-w-md mx-auto text-center">
+        <h2 class="text-2xl font-bold text-gray-400 mb-2">Categoria: <span id="role-category" class="text-white">---</span></h2>
+        
+        <div class="bg-gray-800 p-8 rounded-2xl neon-border my-8 w-full">
+            <p class="text-gray-400 mb-2 uppercase tracking-wide">Sua Palavra Secreta</p>
+            <div id="role-word" class="text-4xl font-extrabold text-white hidden-word py-4 bg-gray-900 rounded-lg">
+                CLIQUE PARA VER
+            </div>
+            <p id="role-instruction" class="mt-6 text-sm text-gray-300">Dê uma dica que prove que você sabe a palavra, mas sem ser óbvio demais!</p>
+        </div>
+
+        <button onclick="player_readyForClue()" id="btn-role-ready" class="btn w-full p-4 rounded-xl text-xl">Estou Pronto</button>
+        <p id="role-waiting" class="text-gray-400 mt-4 hidden">Aguardando outros jogadores...</p>
+    </div>
+
+    <!-- TELA 6: FASE DE DICAS -->
+    <div id="screen-clue" class="screen w-full max-w-md mx-auto text-center">
+        <div class="w-full bg-gray-800 p-4 rounded-xl mb-6">
+            <h3 class="text-sm text-gray-400">Tempo Restante</h3>
+            <h2 id="clue-timer-text" class="text-3xl font-bold text-pink-500 mb-2">20s</h2>
+            <div class="w-full bg-gray-900 rounded-full h-2">
+                <div id="clue-timer-bar" class="bg-pink-500 h-2 rounded-full" style="width: 100%"></div>
+            </div>
+        </div>
+
+        <div id="clue-input-area" class="w-full">
+            <h2 class="text-2xl font-bold mb-4">Sua vez de dar a dica!</h2>
+            <input type="text" id="clue-input" placeholder="Escreva UMA palavra..." class="w-full p-4 mb-4 rounded-xl bg-gray-800 text-white border-2 border-gray-700 focus:border-purple-500 outline-none text-center text-xl font-bold" maxlength="20">
+            <button onclick="player_submitClue()" class="btn w-full p-4 rounded-xl text-xl">Enviar Dica</button>
+        </div>
+
+        <div id="clue-waiting-area" class="hidden w-full">
+            <h2 class="text-2xl font-bold mb-4">Aguardando as dicas...</h2>
+            <ul id="clue-live-list" class="text-left space-y-2 bg-gray-800 p-4 rounded-xl">
+                <!-- Dicas enviadas aparecem aqui como "Pronto" -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- TELA 7: VOTAÇÃO -->
+    <div id="screen-vote" class="screen w-full max-w-lg mx-auto">
+        <h2 class="text-3xl font-bold text-center mb-2">Quem é o Impostor?</h2>
+        <p class="text-center text-gray-400 mb-6">Analise as dicas e vote no suspeito.</p>
+
+        <div id="vote-clues-list" class="w-full bg-gray-800 p-4 rounded-xl mb-6 space-y-3">
+            <!-- Lista de todas as dicas -->
+        </div>
+
+        <div id="vote-buttons" class="grid grid-cols-2 gap-4 w-full mb-6">
+            <!-- Botões de voto nos jogadores -->
+        </div>
+        
+        <p id="vote-waiting" class="text-center text-gray-400 hidden">Aguardando votos...</p>
+    </div>
+
+    <!-- TELA 8: RESULTADO DA RODADA -->
+    <div id="screen-result" class="screen w-full max-w-md mx-auto text-center">
+        <h2 id="result-title" class="text-4xl font-extrabold mb-4 neon-text">RESULTADO</h2>
+        <p id="result-subtitle" class="text-xl text-gray-300 mb-8">O Impostor era o João!</p>
+        
+        <div class="bg-gray-800 p-6 rounded-xl w-full mb-8">
+            <p class="text-sm text-gray-400">A palavra secreta era:</p>
+            <h3 id="result-word" class="text-3xl font-bold text-white mb-4">GOLEIRO</h3>
+            <hr class="border-gray-700 mb-4">
+            <h4 class="text-left font-bold text-purple-400 mb-2">Pontuações:</h4>
+            <ul id="result-scores" class="text-left space-y-2">
+                <!-- Scores -->
+            </ul>
+        </div>
+
+        <button id="btn-next-round" onclick="host_nextRound()" class="btn w-full p-4 rounded-xl text-xl hidden">Próxima Rodada</button>
+        <p id="result-waiting" class="text-gray-400">Aguardando o Host...</p>
+    </div>
+
+    <script>
+        /* =========================================================
+           BANCO DE DADOS DE PALAVRAS E CATEGORIAS
+           ========================================================= */
+        const WORDS_DB = {
+            "Futebol": [
+                { main: "Goleiro", similar: "Zagueiro" },
+                { main: "Pênalti", similar: "Falta" },
+                { main: "Estádio", similar: "Arquibancada" },
+                { main: "Juiz", similar: "Bandeirinha" },
+                { main: "Chuteira", similar: "Caneleira" }
+            ],
+            "Comida": [
+                { main: "Pizza", similar: "Lasanha" },
+                { main: "Hambúrguer", similar: "Cachorro-Quente" },
+                { main: "Sorvete", similar: "Açaí" },
+                { main: "Churrasco", similar: "Bife" },
+                { main: "Sushi", similar: "Temaki" }
+            ],
+            "Animais": [
+                { main: "Cachorro", similar: "Lobo" },
+                { main: "Leão", similar: "Tigre" },
+                { main: "Águia", similar: "Falcão" },
+                { main: "Tubarão", similar: "Golfinho" },
+                { main: "Gato", similar: "Onça" }
+            ],
+            "Videogames": [
+                { main: "Minecraft", similar: "Roblox" },
+                { main: "PlayStation", similar: "Xbox" },
+                { main: "Controle", similar: "Teclado" },
+                { main: "Mario", similar: "Luigi" },
+                { main: "GTA", similar: "Cyberpunk" }
+            ]
+        };
+
+        /* =========================================================
+           VARIÁVEIS GLOBAIS DE ESTADO
+           ========================================================= */
+        let myPeer = null;      // Instância do PeerJS
+        let myId = "";          // Meu ID no PeerJS
+        let myName = "";        // Meu Apelido
+        let isHost = false;     // Sou o dono da sala?
+        let hostConnection = null; // Conexão do Guest com o Host
+        let guestConnections = {}; // Conexões do Host com os Guests
+
+        // Estado do Jogo (Apenas o Host atualiza e envia para os outros)
+        let gameState = {
+            phase: "lobby", // lobby, role, clue, vote, result
+            players: {},    // { id: { name, score, ready, clue, vote, isImpostor, word } }
+            settings: { mode: "double", clueTime: 20, maxRounds: 5 },
+            round: 1,
+            category: "",
+            secretWord: "",
+            impostorWord: "",
+            impostorId: ""
+        };
+
+        let timerInterval = null;
+
+        /* =========================================================
+           SISTEMA DE INTERFACE (UI)
+           ========================================================= */
+        function ui_showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        function ui_showCreateRoom() {
+            myName = document.getElementById('player-name').value.trim() || "Host";
+            ui_showScreen('screen-create');
+        }
+
+        function ui_showJoinRoom() {
+            myName = document.getElementById('player-name').value.trim() || "Jogador";
+            ui_showScreen('screen-join');
+        }
+
+        function ui_updateLobby() {
+            const container = document.getElementById('lobby-players');
+            container.innerHTML = "";
+            let playerCount = 0;
+            
+            for (let id in gameState.players) {
+                playerCount++;
+                const p = gameState.players[id];
+                const isMe = id === myId ? "(Você)" : "";
+                const isH = id === gameState.hostId ? "👑" : "🎮";
+                container.innerHTML += `
+                    <div class="player-card p-3 rounded-lg flex items-center gap-2">
+                        <span class="text-2xl">${isH}</span>
+                        <span class="font-bold text-white truncate">${p.name} ${isMe}</span>
+                    </div>
+                `;
+            }
+
+            if (isHost) {
+                const btn = document.getElementById('btn-start-game');
+                if (playerCount >= 3) {
+                    btn.classList.remove('hidden');
+                } else {
+                    btn.classList.add('hidden');
+                    document.getElementById('lobby-status').innerText = `Mínimo de 3 jogadores (${playerCount}/3)`;
+                }
+            }
+        }
+
+        /* =========================================================
+           SISTEMA MULTIPLAYER (PEERJS) - HOST
+           ========================================================= */
+        function host_createRoom() {
+            isHost = true;
+            document.getElementById('btn-create-room').innerText = "Criando...";
+            
+            // Gerar código de sala amigável (4 letras/números)
+            const roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+            
+            myPeer = new Peer("impw-" + roomCode); // Prefixo para evitar conflito global
+            
+            myPeer.on('open', (id) => {
+                myId = id;
+                gameState.hostId = id;
+                gameState.settings.mode = document.getElementById('config-mode').value;
+                gameState.settings.clueTime = parseInt(document.getElementById('config-clue-time').value);
+                gameState.settings.maxRounds = parseInt(document.getElementById('config-rounds').value);
+                
+                // Adiciona o Host como jogador
+                gameState.players[id] = { name: myName, score: 0, ready: false, clue: "", vote: "", isImpostor: false, word: "" };
+                
+                document.getElementById('lobby-room-code').innerText = roomCode;
+                ui_updateLobby();
+                ui_showScreen('screen-lobby');
+            });
+
+            myPeer.on('connection', (conn) => {
+                conn.on('open', () => {
+                    guestConnections[conn.peer] = conn;
+                });
+                
+                conn.on('data', (data) => {
+                    host_processMessage(conn.peer, data);
+                });
+
+                conn.on('close', () => {
+                    delete gameState.players[conn.peer];
+                    delete guestConnections[conn.peer];
+                    ui_updateLobby();
+                    host_broadcastState();
+                });
+            });
+        }
+
+        // Host recebe ações dos jogadores
+        function host_processMessage(peerId, data) {
+            if (data.type === 'JOIN') {
+                gameState.players[peerId] = { name: data.name, score: 0, ready: false, clue: "", vote: "", isImpostor: false, word: "" };
+                ui_updateLobby();
+                host_broadcastState();
+            }
+            else if (data.type === 'READY') {
+                gameState.players[peerId].ready = true;
+                host_checkAllReady();
+            }
+            else if (data.type === 'SUBMIT_CLUE') {
+                gameState.players[peerId].clue = data.clue;
+                host_broadcastState();
+                host_checkAllClues();
+            }
+            else if (data.type === 'SUBMIT_VOTE') {
+                gameState.players[peerId].vote = data.vote;
+                host_checkAllVotes();
+            }
+        }
+
+        // Host envia o estado do jogo para todos (Censurando palavras secretas!)
+        function host_broadcastState() {
+            for (let id in guestConnections) {
+                // Cria uma cópia do estado para não enviar os segredos de todo mundo para todos
+                let stateCopy = JSON.parse(JSON.stringify(gameState));
+                
+                if (stateCopy.phase !== 'result') {
+                    // Esconde a palavra dos outros jogadores durante o jogo
+                    for (let pId in stateCopy.players) {
+                        if (pId !== id) {
+                            stateCopy.players[pId].word = "???";
+                            stateCopy.players[pId].isImpostor = false; // Esconde quem é
+                        }
+                    }
+                    stateCopy.secretWord = "???";
+                    stateCopy.impostorWord = "???";
+                    stateCopy.impostorId = "???";
+                }
+                
+                guestConnections[id].send({ type: 'STATE_UPDATE', state: stateCopy });
+            }
+            // Atualiza a própria tela do host localmente
+            syncUIWithState(gameState); 
+        }
+
+        /* =========================================================
+           SISTEMA MULTIPLAYER (PEERJS) - GUEST
+           ========================================================= */
+        function guest_joinRoom() {
+            let code = document.getElementById('room-code-input').value.trim().toUpperCase();
+            if(code.length < 4) return alert("Código inválido");
+            
+            document.getElementById('btn-join-room').innerText = "Conectando...";
+            
+            myPeer = new Peer(); // Guest recebe ID aleatório
+            
+            myPeer.on('open', (id) => {
+                myId = id;
+                hostConnection = myPeer.connect("impw-" + code);
+                
+                hostConnection.on('open', () => {
+                    hostConnection.send({ type: 'JOIN', name: myName });
+                    document.getElementById('lobby-room-code').innerText = code;
+                    ui_showScreen('screen-lobby');
+                });
+
+                hostConnection.on('data', (data) => {
+                    if (data.type === 'STATE_UPDATE') {
+                        // Recebeu atualização do Host
+                        gameState = data.state;
+                        syncUIWithState(gameState);
+                    }
+                });
+
+                hostConnection.on('error', () => {
+                    alert("Sala não encontrada ou conexão caiu.");
+                    ui_showScreen('screen-menu');
+                });
+            });
+        }
+
+        function guest_sendToHost(data) {
+            if (hostConnection && hostConnection.open) {
+                hostConnection.send(data);
+            }
+        }
+
+        /* =========================================================
+           LÓGICA DO JOGO (GERIDA PELO HOST)
+           ========================================================= */
+        function host_startGame() {
+            gameState.round = 1;
+            for (let id in gameState.players) {
+                gameState.players[id].score = 0;
+            }
+            host_startRound();
+        }
+
+        function host_startRound() {
+            // Resetar status da rodada
+            let playerIds = Object.keys(gameState.players);
+            for (let id of playerIds) {
+                gameState.players[id].ready = false;
+                gameState.players[id].clue = "";
+                gameState.players[id].vote = "";
+                gameState.players[id].isImpostor = false;
+            }
+
+            // Sortear Categoria e Palavra
+            let categories = Object.keys(WORDS_DB);
+            gameState.category = categories[Math.floor(Math.random() * categories.length)];
+            
+            let wordsList = WORDS_DB[gameState.category];
+            let selectedPair = wordsList[Math.floor(Math.random() * wordsList.length)];
+            
+            gameState.secretWord = selectedPair.main;
+            gameState.impostorWord = selectedPair.similar;
+
+            // Sortear Impostor
+            gameState.impostorId = playerIds[Math.floor(Math.random() * playerIds.length)];
+
+            // Atribuir palavras aos jogadores
+            for (let id of playerIds) {
+                if (id === gameState.impostorId) {
+                    gameState.players[id].isImpostor = true;
+                    if (gameState.settings.mode === "blind") {
+                        gameState.players[id].word = "VOCÊ NÃO TEM PALAVRA!";
+                    } else {
+                        gameState.players[id].word = gameState.impostorWord;
+                    }
+                } else {
+                    gameState.players[id].word = gameState.secretWord;
+                }
+            }
+
+            gameState.phase = 'role';
+            host_broadcastState();
+        }
+
+        function host_checkAllReady() {
+            let allReady = true;
+            for (let id in gameState.players) {
+                if (!gameState.players[id].ready) allReady = false;
+            }
+            if (allReady) {
+                gameState.phase = 'clue';
+                host_broadcastState();
+                
+                // O temporizador é gerido visualmente no cliente, mas o host força o fim.
+                setTimeout(() => {
+                    if(gameState.phase === 'clue') {
+                        host_forceEndCluePhase();
+                    }
+                }, gameState.settings.clueTime * 1000 + 2000); // 2s de margem
+            }
+        }
+
+        function host_checkAllClues() {
+            let allClues = true;
+            for (let id in gameState.players) {
+                if (gameState.players[id].clue === "") allClues = false;
+            }
+            if (allClues) {
+                host_forceEndCluePhase();
+            }
+        }
+
+        function host_forceEndCluePhase() {
+            gameState.phase = 'vote';
+            host_broadcastState();
+        }
+
+        function host_checkAllVotes() {
+            let allVotes = true;
+            for (let id in gameState.players) {
+                if (gameState.players[id].vote === "") allVotes = false;
+            }
+            if (allVotes) {
+                host_calculateResults();
+            }
+        }
+
+        function host_calculateResults() {
+            // Contabilizar votos
+            let voteCounts = {};
+            for (let id in gameState.players) {
+                let v = gameState.players[id].vote;
+                if(v) {
+                    voteCounts[v] = (voteCounts[v] || 0) + 1;
+                }
+            }
+
+            // Descobrir quem foi o mais votado
+            let maxVotes = 0;
+            let votedOutId = null;
+            for(let id in voteCounts) {
+                if(voteCounts[id] > maxVotes) {
+                    maxVotes = voteCounts[id];
+                    votedOutId = id;
+                }
+            }
+
+            // Pontuação Simples
+            let impostorVotedOut = (votedOutId === gameState.impostorId);
+            
+            for (let id in gameState.players) {
+                let p = gameState.players[id];
+                if (p.isImpostor) {
+                    if (!impostorVotedOut) p.score += 150; // Impostor sobreviveu
+                } else {
+                    if (p.vote === gameState.impostorId) p.score += 100; // Votou certo
+                }
+            }
+
+            gameState.phase = 'result';
+            host_broadcastState();
+        }
+
+        function host_nextRound() {
+            if (gameState.round >= gameState.settings.maxRounds) {
+                alert("FIM DE JOGO! Obrigado por jogar.");
+                location.reload(); // Reinicia simples
+            } else {
+                gameState.round++;
+                host_startRound();
+            }
+        }
+
+        /* =========================================================
+           AÇÕES DOS JOGADORES (GUEST & HOST)
+           ========================================================= */
+        function player_readyForClue() {
+            document.getElementById('btn-role-ready').classList.add('hidden');
+            document.getElementById('role-waiting').classList.remove('hidden');
+            
+            if(isHost) {
+                gameState.players[myId].ready = true;
+                host_checkAllReady();
+            } else {
+                guest_sendToHost({ type: 'READY' });
+            }
+        }
+
+        function player_submitClue() {
+            let clue = document.getElementById('clue-input').value.trim();
+            if(!clue) return;
+            
+            document.getElementById('clue-input-area').classList.add('hidden');
+            document.getElementById('clue-waiting-area').classList.remove('hidden');
+
+            if(isHost) {
+                gameState.players[myId].clue = clue;
+                host_checkAllClues();
+                host_broadcastState();
+            } else {
+                guest_sendToHost({ type: 'SUBMIT_CLUE', clue: clue });
+            }
+        }
+
+        function player_vote(targetId) {
+            document.getElementById('vote-buttons').classList.add('hidden');
+            document.getElementById('vote-waiting').classList.remove('hidden');
+
+            if(isHost) {
+                gameState.players[myId].vote = targetId;
+                host_checkAllVotes();
+            } else {
+                guest_sendToHost({ type: 'SUBMIT_VOTE', vote: targetId });
+            }
+        }
+
+        /* =========================================================
+           RENDERIZAÇÃO DE TELA COM BASE NO ESTADO
+           ========================================================= */
+        let lastPhase = "";
+
+        function syncUIWithState(state) {
+            if (state.phase === 'lobby') {
+                ui_updateLobby();
+                if(lastPhase !== 'lobby') ui_showScreen('screen-lobby');
+            } 
+            else if (state.phase === 'role') {
+                if(lastPhase !== 'role') {
+                    // Reset da tela
+                    document.getElementById('role-word').innerText = state.players[myId].word;
+                    document.getElementById('role-category').innerText = state.category;
+                    document.getElementById('btn-role-ready').classList.remove('hidden');
+                    document.getElementById('role-waiting').classList.add('hidden');
+                    
+                    if(state.players[myId].isImpostor) {
+                        document.getElementById('role-word').classList.add('text-pink-500');
+                        document.getElementById('role-instruction').innerText = "Você é o IMPOSTOR! Dê uma dica baseada no que os outros falarem, tente não ser descoberto.";
+                    } else {
+                        document.getElementById('role-word').classList.remove('text-pink-500');
+                        document.getElementById('role-instruction').innerText = "Dê uma dica que prove que você sabe a palavra, mas sem ser óbvio demais!";
+                    }
+                    
+                    ui_showScreen('screen-role');
+                }
+            }
+            else if (state.phase === 'clue') {
+                if(lastPhase !== 'clue') {
+                    document.getElementById('clue-input').value = "";
+                    document.getElementById('clue-input-area').classList.remove('hidden');
+                    document.getElementById('clue-waiting-area').classList.add('hidden');
+                    startClientTimer(state.settings.clueTime);
+                    ui_showScreen('screen-clue');
+                }
+                
+                // Atualizar lista de quem já enviou dica
+                const list = document.getElementById('clue-live-list');
+                list.innerHTML = "";
+                for(let id in state.players) {
+                    let p = state.players[id];
+                    let status = p.clue !== "" ? "✅ Pronto" : "⏳ Escrevendo...";
+                    list.innerHTML += `<li class="text-white">${p.name}: <span class="${p.clue ? 'text-green-400' : 'text-gray-400'}">${status}</span></li>`;
+                }
+            }
+            else if (state.phase === 'vote') {
+                if(lastPhase !== 'vote') {
+                    clearInterval(timerInterval); // Para o timer de dica
+                    
+                    // Preencher Dicas
+                    const cluesList = document.getElementById('vote-clues-list');
+                    cluesList.innerHTML = "";
+                    for(let id in state.players) {
+                        cluesList.innerHTML += `<div class="p-2 border-b border-gray-700"><strong>${state.players[id].name}:</strong> "${state.players[id].clue}"</div>`;
+                    }
+
+                    // Preencher Botões de Voto
+                    const voteBtns = document.getElementById('vote-buttons');
+                    voteBtns.innerHTML = "";
+                    for(let id in state.players) {
+                        if(id !== myId) { // Não pode votar em si mesmo
+                            voteBtns.innerHTML += `<button onclick="player_vote('${id}')" class="p-3 bg-gray-700 hover:bg-pink-600 rounded-lg text-white font-bold transition">${state.players[id].name}</button>`;
+                        }
+                    }
+
+                    document.getElementById('vote-buttons').classList.remove('hidden');
+                    document.getElementById('vote-waiting').classList.add('hidden');
+
+                    ui_showScreen('screen-vote');
+                }
+            }
+            else if (state.phase === 'result') {
+                if(lastPhase !== 'result') {
+                    const impName = state.players[state.impostorId].name;
+                    document.getElementById('result-subtitle').innerHTML = `O Impostor era: <span class="text-pink-500 font-bold">${impName}</span>!`;
+                    
+                    if(state.settings.mode === 'blind') {
+                        document.getElementById('result-word').innerText = `A palavra era: ${state.secretWord}`;
+                    } else {
+                        document.getElementById('result-word').innerHTML = `<span class="text-gray-400 text-sm">Normais:</span> ${state.secretWord} <br> <span class="text-gray-400 text-sm mt-2 block">Impostor:</span> ${state.impostorWord}`;
+                    }
+
+                    // Atualizar placar
+                    const scoreList = document.getElementById('result-scores');
+                    scoreList.innerHTML = "";
+                    // Ordenar por score
+                    let arr = Object.values(state.players).sort((a,b) => b.score - a.score);
+                    for(let p of arr) {
+                        scoreList.innerHTML += `<li class="flex justify-between bg-gray-700 p-2 rounded"><span>${p.name}</span> <span class="font-bold text-cyan-400">${p.score} pts</span></li>`;
+                    }
+
+                    if(isHost) {
+                        document.getElementById('btn-next-round').classList.remove('hidden');
+                        document.getElementById('result-waiting').classList.add('hidden');
+                    } else {
+                        document.getElementById('btn-next-round').classList.add('hidden');
+                        document.getElementById('result-waiting').classList.remove('hidden');
+                    }
+
+                    ui_showScreen('screen-result');
+                }
+            }
+
+            lastPhase = state.phase;
+        }
+
+        /* =========================================================
+           TEMPORIZADOR CLIENT-SIDE
+           ========================================================= */
+        function startClientTimer(seconds) {
+            clearInterval(timerInterval);
+            let timeRemaining = seconds;
+            let bar = document.getElementById('clue-timer-bar');
+            let txt = document.getElementById('clue-timer-text');
+            
+            bar.style.transition = 'none';
+            bar.style.width = '100%';
+            setTimeout(() => { bar.style.transition = 'width 1s linear'; }, 50);
+
+            txt.innerText = timeRemaining + "s";
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                let percent = (timeRemaining / seconds) * 100;
+                bar.style.width = percent + "%";
+                txt.innerText = timeRemaining + "s";
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    // Força o envio vazio se o tempo acabar
+                    if(!document.getElementById('clue-input-area').classList.contains('hidden')){
+                        document.getElementById('clue-input').value = "Sem tempo!";
+                        player_submitClue();
+                    }
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
